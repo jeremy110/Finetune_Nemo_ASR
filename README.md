@@ -60,3 +60,7 @@ If you are using a GPU with limited memory (e.g., RTX 4090) and wish to enable t
 * Toggle: Set the bnb_optim flag to True at the beginning of the ft_110M_enhi_demo.py script.
 
 * uv pip install bitsandbytes
+
+
+## Result
+![val_wer](./img/tensorboard_val_wer.png)
