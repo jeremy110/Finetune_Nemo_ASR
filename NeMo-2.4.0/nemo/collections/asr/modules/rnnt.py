@@ -652,6 +652,7 @@ class RNNTDecoder(rnnt_abstract.AbstractRNNTDecoder, Exportable, AdapterModuleMi
         normalization_mode: Optional[str] = None,
         random_state_sampling: bool = False,
         blank_as_pad: bool = True,
+        bnb_optim: bool = False
     ):
         # Required arguments
         self.pred_hidden = prednet['pred_hidden']
@@ -680,6 +681,7 @@ class RNNTDecoder(rnnt_abstract.AbstractRNNTDecoder, Exportable, AdapterModuleMi
             hidden_hidden_bias_scale=hidden_hidden_bias_scale,
             dropout=dropout,
             rnn_hidden_size=prednet.get("rnn_hidden_size", -1),
+            bnb_optim = bnb_optim,
         )
         self._rnnt_export = False
 
@@ -823,6 +825,7 @@ class RNNTDecoder(rnnt_abstract.AbstractRNNTDecoder, Exportable, AdapterModuleMi
         hidden_hidden_bias_scale,
         dropout,
         rnn_hidden_size,
+        bnb_optim: bool = False
     ):
         """
         Prepare the trainable parameters of the Prediction Network.
@@ -845,6 +848,13 @@ class RNNTDecoder(rnnt_abstract.AbstractRNNTDecoder, Exportable, AdapterModuleMi
             embed = torch.nn.Embedding(vocab_size + 1, pred_n_hidden, padding_idx=self.blank_idx)
         else:
             embed = torch.nn.Embedding(vocab_size, pred_n_hidden)
+        
+        if bnb_optim:
+            import bitsandbytes as bnb 
+            if self.blank_as_pad:
+                embed = bnb.nn.StableEmbedding(vocab_size + 1, pred_n_hidden, padding_idx=self.blank_idx)
+            else:
+                embed = bnb.nn.StableEmbedding(vocab_size, pred_n_hidden)
 
         layers = torch.nn.ModuleDict(
             {
