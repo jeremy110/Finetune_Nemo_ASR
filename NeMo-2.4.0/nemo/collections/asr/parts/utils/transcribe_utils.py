@@ -504,7 +504,7 @@ def write_transcription(
 
                         if not cfg.decoding.beam.return_best_hypothesis:
                             item['beams'] = beams[idx]
-                    f.write(json.dumps(item) + "\n")
+                    f.write(json.dumps(item, ensure_ascii = False) + "\n")
 
     return cfg.output_filename, pred_text_attr_name
 
