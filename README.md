@@ -64,3 +64,13 @@ If you are using a GPU with limited memory (e.g., RTX 4090) and wish to enable t
 
 ## Result
 ![val_wer](./img/tensorboard_val_wer.png)
+
+## Note
+This model was trained using a private dataset provided by https://huggingface.co/spaces/RinggAI/STT. The trained checkpoint (ckpt) will only be released with permission. However, the training script has been organized and includes 8-bit optimization (8-bit optim), which allows increasing the max_duration to achieve a higher batch size on a 24GB memory card.
+
+Here are the observations on the model's prediction stage (character output) during my own training:
+1. Initial stage: Outputs random characters.
+2. Mute stage: No characters are output (up to 5k steps).
+3. Basic vocabulary stage: Outputs basic characters (5k ~ 15k steps).
+4. Major vocabulary stage: Outputs most characters (15k ~ 30k steps; at this point, the validation WER usually falls between 25% and 35%, depending on the language).
+5. Convergence stage: The model starts to fully converge (100k ~ 150k steps). Based on the size of the corpus, if it's around 500 hours, training to about 150k steps is generally sufficient for convergence.
