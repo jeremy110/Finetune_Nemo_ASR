@@ -710,8 +710,8 @@ class GreedyBatchedTDTLabelLoopingComputer(
             encoder_output = encoder_output.to(torch.get_autocast_gpu_dtype())
 
         # init or reinit graph
-        if self.state is None or self.state.need_reinit(encoder_output):
-            self._graph_reinitialize(encoder_output, encoder_output_length)
+        # if self.state is None or self.state.need_reinit(encoder_output):
+        self._graph_reinitialize(encoder_output, encoder_output_length)
 
         # copy (projected) encoder output and lenghts
         self.state.encoder_output_projected[:current_batch_size, :current_max_time, ...].copy_(encoder_output)
