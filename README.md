@@ -74,3 +74,16 @@ Here are the observations on the model's prediction stage (character output) dur
 3. Basic vocabulary stage: Outputs basic characters (5k ~ 15k steps).
 4. Major vocabulary stage: Outputs most characters (15k ~ 30k steps; at this point, the validation WER usually falls between 25% and 35%, depending on the language).
 5. Convergence stage: The model starts to fully converge (100k ~ 150k steps). Based on the size of the corpus, if it's around 500 hours, training to about 150k steps is generally sufficient for convergence.
+
+
+## 🚀 Roadmap
+
+### 🟩 Done
+- 8-bit optimizer integration
+- Fix loss initialization bug  
+
+### 🟧 In Progress
+- replace encoder attention to bi-rwkv
+
+### 🟥 Planned
+- 
