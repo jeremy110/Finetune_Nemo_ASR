@@ -79,6 +79,8 @@ class ConformerLayer(torch.nn.Module, AttentionAdapterModuleMixin, AccessMixin):
         use_bias=True,
         use_pytorch_sdpa=False,
         use_pytorch_sdpa_backends=None,
+        layer_id = 0,
+        n_layer = 24,
     ):
         super(ConformerLayer, self).__init__()
 
@@ -144,6 +146,14 @@ class ConformerLayer(torch.nn.Module, AttentionAdapterModuleMixin, AccessMixin):
                 use_pytorch_sdpa=self.use_pytorch_sdpa,
                 use_pytorch_sdpa_backends=self.use_pytorch_sdpa_backends,
             )
+        elif self_attention_model == "rwkv7_attn":
+            from nemo.collections.asr.modules.birwkv7_time_mix import BiRWKV7TimeMix
+            self.self_attn = BiRWKV7TimeMix(
+                n_head = n_heads,
+                n_feat = d_model,
+                layer_id = layer_id,
+                n_layer = n_layer,
+            )
         else:
             raise ValueError(
                 f"'{self_attention_model}' is not not a valid value for 'self_attention_model', "
@@ -157,7 +167,7 @@ class ConformerLayer(torch.nn.Module, AttentionAdapterModuleMixin, AccessMixin):
         self.dropout = nn.Dropout(dropout)
         self.norm_out = LayerNorm(d_model)
 
-    def forward(self, x, att_mask=None, pos_emb=None, pad_mask=None, cache_last_channel=None, cache_last_time=None):
+    def forward(self, x, att_mask=None, pos_emb=None, pad_mask=None, cache_last_channel=None, cache_last_time=None, v_first=None):
         """
         Args:
             x (torch.Tensor): input signals (B, T, d_model)
@@ -183,6 +193,8 @@ class ConformerLayer(torch.nn.Module, AttentionAdapterModuleMixin, AccessMixin):
             x = self.self_attn(query=x, key=x, value=x, pad_mask=pad_mask, pos_emb=pos_emb, cache=cache_last_channel)
         elif self.self_attention_model == 'abs_pos':
             x = self.self_attn(query=x, key=x, value=x, mask=att_mask, cache=cache_last_channel)
+        elif self.self_attention_model == 'rwkv7_attn':
+            x, v_first = self.self_attn(x = x, v_first = v_first, mask = pad_mask)
         else:
             x = None
 
@@ -228,6 +240,8 @@ class ConformerLayer(torch.nn.Module, AttentionAdapterModuleMixin, AccessMixin):
         ):
             self.register_accessible_tensor(name='encoder', tensor=x)
         if cache_last_channel is None:
+            if self.self_attention_model == 'rwkv7_attn':
+                return x, v_first
             return x
         else:
             return x, cache_last_channel, cache_last_time

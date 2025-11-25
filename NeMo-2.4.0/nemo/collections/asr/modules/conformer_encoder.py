@@ -444,6 +444,10 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
             self.pos_enc = PositionalEncoding(
                 d_model=d_model, dropout_rate=dropout_pre_encoder, max_len=pos_emb_max_len, xscale=self.xscale
             )
+        elif self_attention_model == "rwkv7_attn":
+            pos_bias_u = None
+            pos_bias_v = None
+            self.pos_enc = None
         else:
             raise ValueError(f"Not valid self_attention_model: '{self_attention_model}'!")
 
@@ -468,6 +472,8 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
                 use_bias=use_bias,
                 use_pytorch_sdpa=self.use_pytorch_sdpa,
                 use_pytorch_sdpa_backends=self.use_pytorch_sdpa_backends,
+                layer_id = i,
+                n_layer = n_layers,
             )
             self.layers.append(layer)
 
@@ -477,7 +483,8 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
         else:
             self.out_proj = None
             self._feat_out = d_model
-        self.set_max_audio_length(self.pos_emb_max_len)
+        if self_attention_model != "rwkv7_attn":
+            self.set_max_audio_length(self.pos_emb_max_len)
         self.use_pad_mask = True
 
         self.setup_streaming_params()
@@ -581,7 +588,7 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
             self.update_max_seq_length(
                 seq_length=audio_signal.size(2) * self.subsampling_factor, device=audio_signal.device
             )
-        else:
+        elif self.self_attention_model != 'rwkv7_attn':
             self.update_max_seq_length(seq_length=audio_signal.size(2), device=audio_signal.device)
         return self.forward_internal(
             audio_signal,
@@ -655,7 +662,8 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
             cache_len = 0
             offset = None
 
-        audio_signal, pos_emb = self.pos_enc(x=audio_signal, cache_len=cache_len)
+        if self.pos_enc != None:
+            audio_signal, pos_emb = self.pos_enc(x=audio_signal, cache_len=cache_len)
 
         # Create the self-attention and padding masks
         pad_mask, att_mask = self._create_masks(
@@ -674,6 +682,8 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
             cache_last_time_next = []
             cache_last_channel_next = []
 
+        v_first = None
+
         for lth, (drop_prob, layer) in enumerate(zip(self.layer_drop_probs, self.layers)):
             original_signal = audio_signal
             if cache_last_channel is not None:
@@ -682,14 +692,22 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
             else:
                 cache_last_channel_cur = None
                 cache_last_time_cur = None
-            audio_signal = layer(
-                x=audio_signal,
-                att_mask=att_mask,
-                pos_emb=pos_emb,
-                pad_mask=pad_mask,
-                cache_last_channel=cache_last_channel_cur,
-                cache_last_time=cache_last_time_cur,
-            )
+            
+            if self.self_attention_model == "rwkv7_attn":
+                audio_signal, v_first = layer(
+                    x = audio_signal,
+                    v_first = v_first,
+                    pad_mask = pad_mask,
+                )
+            else:
+                audio_signal = layer(
+                    x=audio_signal,
+                    att_mask=att_mask,
+                    pos_emb=pos_emb,
+                    pad_mask=pad_mask,
+                    cache_last_channel=cache_last_channel_cur,
+                    cache_last_time=cache_last_time_cur,
+                )
 
             if cache_last_channel_cur is not None:
                 (audio_signal, cache_last_channel_cur, cache_last_time_cur) = audio_signal
@@ -1140,16 +1158,22 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
                 max_len=self._cfg.pos_emb_max_len,
                 xscale=self.xscale,
             )
+        elif self_attention_model == "rwkv7_attn":
+            new_pos_enc = None
         else:
             raise ValueError(f"Not valid self_attention_model: '{self_attention_model}'!")
 
-        if device is not None:
+        if device is not None and new_pos_enc is not None:
             new_pos_enc = new_pos_enc.to(device=device)
         del self.pos_enc
         self.pos_enc = new_pos_enc
         self.self_attention_model = self_attention_model
         self.att_context_size = att_context_size
-        self.set_max_audio_length(self.pos_emb_max_len)
+        
+        if self.self_attention_model != 'rwkv7_attn':
+            self.set_max_audio_length(self.pos_emb_max_len)
+
+        layer_id = 0
 
         for _, m in self.named_modules():
             if type(m) == ConformerLayer:
@@ -1185,6 +1209,15 @@ class ConformerEncoder(NeuralModule, StreamingEncoder, Exportable, AccessMixin):
                         use_pytorch_sdpa=self.use_pytorch_sdpa,
                         use_pytorch_sdpa_backends=self.use_pytorch_sdpa_backends,
                     )
+                elif self_attention_model == "rwkv7_attn":
+                    from nemo.collections.asr.modules.birwkv7_time_mix import BiRWKV7TimeMix
+                    new_attn = BiRWKV7TimeMix(
+                        n_head = self._cfg.n_heads,
+                        n_feat = self._cfg.d_model,
+                        layer_id = layer_id,
+                        n_layer = self._cfg.n_layers,
+                    )
+                    layer_id += 1
                 else:
                     raise ValueError(
                         f"'{self_attention_model}' is not not a valid value for 'self_attention_model', "
